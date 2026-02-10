@@ -1,180 +1,87 @@
-const express = require("express");
-const { Pool } = require("pg");
-const bcrypt = require("bcrypt");
-const path = require("path");
+const express = require('express');
+const path = require('path');
+const bcrypt = require('bcrypt');
+const { Pool } = require('pg');
 
 const app = express();
 app.use(express.json());
-app.use(express.static("public"));
+app.use(express.urlencoded({ extended: true }));
 
-/* =======================
-   POSTGRESQL CONNECTION
-======================= */
+// ----------------------
+// Статика (CSS, JS, manifest, sw)
+// ----------------------
+app.use(express.static(__dirname)); // теперь все файлы из корня доступны
+
+// ----------------------
+// PostgreSQL подключение
+// ----------------------
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
-/* =======================
-   INIT TABLES (RUN ONCE)
-======================= */
-(async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL
-      );
+// Проверка соединения с базой
+pool.connect()
+  .then(() => console.log('✅ PostgreSQL connected'))
+  .catch(err => console.error('❌ DB INIT ERROR:', err));
 
-      CREATE TABLE IF NOT EXISTS boards (
-        id SERIAL PRIMARY KEY,
-        name TEXT NOT NULL,
-        description TEXT
-      );
+// ----------------------
+// Главная страница
+// ----------------------
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-      CREATE TABLE IF NOT EXISTS threads (
-        id SERIAL PRIMARY KEY,
-        board_id INT,
-        title TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-
-      CREATE TABLE IF NOT EXISTS posts (
-        id SERIAL PRIMARY KEY,
-        thread_id INT,
-        user_name TEXT,
-        content TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-
-    // boards по умолчанию
-    await pool.query(`
-      INSERT INTO boards (name, description)
-      VALUES 
-        ('Technology', 'Tech / IT / Hacking'),
-        ('Anime', 'Anime & Manga'),
-        ('Games', 'Games & Gaming'),
-        ('Random', 'Anything goes')
-      ON CONFLICT DO NOTHING;
-    `);
-
-    console.log("✅ PostgreSQL ready");
-  } catch (err) {
-    console.error("❌ DB INIT ERROR:", err);
-  }
-})();
-
-/* =======================
-   AUTH
-======================= */
-app.post("/api/register", async (req, res) => {
+// ----------------------
+// Регистрация пользователя
+// ----------------------
+app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
-  if (!username || !password)
-    return res.status(400).json({ error: "Missing data" });
+  if (!username || !password) return res.status(400).send('Missing fields');
 
   try {
-    const hash = await bcrypt.hash(password, 10);
+    const hashed = await bcrypt.hash(password, 10);
     await pool.query(
-      "INSERT INTO users (username, password) VALUES ($1,$2)",
-      [username, hash]
+      'INSERT INTO users (username, password) VALUES ($1, $2)',
+      [username, hashed]
     );
-    res.json({ ok: true });
-  } catch {
-    res.status(400).json({ error: "User exists" });
+    res.status(200).send('User registered');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Database error');
   }
 });
 
-app.post("/api/login", async (req, res) => {
+// ----------------------
+// Вход пользователя
+// ----------------------
+app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
+  if (!username || !password) return res.status(400).send('Missing fields');
 
-  const result = await pool.query(
-    "SELECT * FROM users WHERE username=$1",
-    [username]
-  );
+  try {
+    const result = await pool.query(
+      'SELECT * FROM users WHERE username = $1',
+      [username]
+    );
 
-  if (result.rowCount === 0)
-    return res.status(401).json({ error: "No user" });
+    if (result.rows.length === 0) return res.status(400).send('User not found');
 
-  const user = result.rows[0];
-  const ok = await bcrypt.compare(password, user.password);
+    const match = await bcrypt.compare(password, result.rows[0].password);
+    if (!match) return res.status(400).send('Wrong password');
 
-  if (!ok)
-    return res.status(401).json({ error: "Wrong password" });
-
-  res.json({ ok: true, username });
+    res.status(200).send('Logged in');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Database error');
+  }
 });
 
-/* =======================
-   BOARDS
-======================= */
-app.get("/api/boards", async (req, res) => {
-  const boards = await pool.query("SELECT * FROM boards ORDER BY id");
-  res.json(boards.rows);
+// ----------------------
+// Сервер
+// ----------------------
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, () => {
+  console.log(`🚀 fsociety running on port ${PORT}`);
 });
-
-/* =======================
-   THREADS
-======================= */
-app.get("/api/threads/:boardId", async (req, res) => {
-  const { boardId } = req.params;
-  const threads = await pool.query(
-    "SELECT * FROM threads WHERE board_id=$1 ORDER BY created_at DESC",
-    [boardId]
-  );
-  res.json(threads.rows);
-});
-
-app.post("/api/thread", async (req, res) => {
-  const { boardId, title } = req.body;
-  if (!title) return res.status(400).json({ error: "No title" });
-
-  await pool.query(
-    "INSERT INTO threads (board_id, title) VALUES ($1,$2)",
-    [boardId, title]
-  );
-
-  res.json({ ok: true });
-});
-
-/* =======================
-   POSTS
-======================= */
-app.get("/api/posts/:threadId", async (req, res) => {
-  const { threadId } = req.params;
-  const posts = await pool.query(
-    "SELECT * FROM posts WHERE thread_id=$1 ORDER BY created_at",
-    [threadId]
-  );
-  res.json(posts.rows);
-});
-
-app.post("/api/post", async (req, res) => {
-  const { threadId, user, content } = req.body;
-  if (!content)
-    return res.status(400).json({ error: "Empty post" });
-
-  await pool.query(
-    "INSERT INTO posts (thread_id, user_name, content) VALUES ($1,$2,$3)",
-    [threadId, user || "Anon", content]
-  );
-
-  res.json({ ok: true });
-});
-
-/* =======================
-   FRONTEND
-======================= */
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public/index.html"));
-});
-
-/* =======================
-   START
-======================= */
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log("🚀 fsociety running on port", PORT)
-);
 
