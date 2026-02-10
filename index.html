@@ -1,4 +1,4 @@
-// server.js
+
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
@@ -16,10 +16,10 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(bodyParser.json());
 
-// ======== Папка с фронтом ========
-app.use(express.static(__dirname)); // теперь всё в одной папке
+// ну типо вот это
+app.use(express.static(__dirname)); // папочка
 
-// ======== Подключение к PostgreSQL ========
+// Подключение к какойто фигне 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
@@ -48,19 +48,19 @@ async function initDB() {
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
-    console.log('✅ Таблицы проверены / созданы');
+    console.log('я хз работает спроси у чата джпт');
   } catch (err) {
-    console.error('❌ Ошибка при инициализации DB:', err);
+    console.error('ноу ноу ноу мистор фиш:', err);
   }
 }
 
-// ======== Фронт: отдаём index.html ========
+// еще какаято очень важная хрень
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// ======== API ========
-// Регистрация
+// апи
+// Рег
 app.post('/api/register', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).send('Ник и пароль обязательны');
@@ -77,7 +77,7 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Логин
+// привет ребята или как сейчас модно говорить привед медвед
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).send('Ник и пароль обязательны');
@@ -94,7 +94,7 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-// Создание темы
+// темки 
 app.post('/api/thread', async (req, res) => {
   const { title, content, user_id } = req.body;
   if (!title || !user_id) return res.status(400).send('Нужны заголовок и ID пользователя');
@@ -110,7 +110,7 @@ app.post('/api/thread', async (req, res) => {
   }
 });
 
-// Список тем
+// Списосок крутых темок
 app.get('/api/threads', async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM threads ORDER BY created_at DESC');
@@ -120,7 +120,7 @@ app.get('/api/threads', async (req, res) => {
   }
 });
 
-// Посты по теме
+// Постики
 app.get('/api/thread/:id/posts', async (req, res) => {
   const threadId = req.params.id;
   try {
@@ -134,7 +134,7 @@ app.get('/api/thread/:id/posts', async (req, res) => {
   }
 });
 
-// Создание поста
+// привет я конор и проверю как это работает на самом деле
 app.post('/api/thread/:id/post', async (req, res) => {
   const threadId = req.params.id;
   const { content, user_id } = req.body;
@@ -151,15 +151,16 @@ app.post('/api/thread/:id/post', async (req, res) => {
   }
 });
 
-// ======== СТАРТ СЕРВЕРА ========
+// ну что похимичим
 app.listen(PORT, async () => {
-  console.log(`🚀 fsociety running on port ${PORT}`);
+  console.log(`еееее порт этого ${PORT}`);
   try {
     await pool.connect();
-    console.log('✅ PostgreSQL connected');
+    console.log('какаято хрень очень важная включиласб');
     await initDB();
   } catch (err) {
-    console.error('❌ DB INIT ERROR:', err);
+    console.error('пацан  к успеху шел не повезло не фортануло:', err);
   }
 });
+
 
