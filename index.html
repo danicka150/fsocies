@@ -1,204 +1,165 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FSOCIETY Board</title>
-<style>
-body { font-family: Inter, sans-serif; background: #121212; color: #eee; margin: 0; padding: 0; }
-header { background: #1a1a1a; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
-header h1 { margin: 0; color: #0ff; }
-.container { padding: 20px; max-width: 800px; margin: auto; }
-form { margin-bottom: 20px; }
-input, button, textarea { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
-button { background: #0ff; border: none; color: #000; cursor: pointer; }
-.thread, .post { border: 1px solid #333; padding: 10px; margin-bottom: 10px; }
-.thread-title { font-weight: bold; color: #0ff; cursor: pointer; }
-.post-content { margin-top: 5px; }
-.hidden { display: none; }
-</style>
-</head>
-<body>
+// server.js
+import express from 'express';
+import bodyParser from 'body-parser';
+import cors from 'cors';
+import pg from 'pg';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-<header>
-  <h1>FSOCIETY</h1>
-</header>
+const { Pool } = pg;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-<div class="container">
+const app = express();
+const PORT = process.env.PORT || 10000;
 
-  <h2>Регистрация</h2>
-  <form id="registerForm">
-    <input type="text" id="regUsername" placeholder="Ник" required>
-    <input type="password" id="regPassword" placeholder="Пароль" required>
-    <button type="submit">Зарегистрироваться</button>
-  </form>
+app.use(cors());
+app.use(bodyParser.json());
 
-  <h2>Логин</h2>
-  <form id="loginForm">
-    <input type="text" id="logUsername" placeholder="Ник" required>
-    <input type="password" id="logPassword" placeholder="Пароль" required>
-    <button type="submit">Войти</button>
-  </form>
+// ======== Папка с фронтом ========
+app.use(express.static(__dirname)); // теперь всё в одной папке
 
-  <div id="boardSection" class="hidden">
-
-    <h2>Создать тему</h2>
-    <form id="threadForm">
-      <input type="text" id="threadTitle" placeholder="Заголовок" required>
-      <textarea id="threadContent" placeholder="Текст темы" required></textarea>
-      <input type="number" id="threadUserId" placeholder="ID пользователя" required>
-      <button type="submit">Создать тему</button>
-    </form>
-
-    <h2>Темы</h2>
-    <div id="threadsContainer"></div>
-
-    <div id="postsSection" class="hidden">
-      <h2 id="currentThreadTitle"></h2>
-      <form id="postForm">
-        <textarea id="postContent" placeholder="Написать ответ" required></textarea>
-        <input type="number" id="postUserId" placeholder="ID пользователя" required>
-        <input type="hidden" id="postThreadId">
-        <button type="submit">Отправить пост</button>
-      </form>
-      <div id="postsContainer"></div>
-      <button id="backToThreads">Назад к темам</button>
-    </div>
-
-  </div>
-
-</div>
-
-<script>
-// ==== Регистрация ====
-const registerForm = document.getElementById('registerForm');
-registerForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  const username = document.getElementById('regUsername').value;
-  const password = document.getElementById('regPassword').value;
-
-  const res = await fetch('/api/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
-
-  const text = await res.text();
-  alert(text);
+// ======== Подключение к PostgreSQL ========
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
 });
 
-// ==== Логин ====
-const loginForm = document.getElementById('loginForm');
-loginForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  const username = document.getElementById('logUsername').value;
-  const password = document.getElementById('logPassword').value;
+async function initDB() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password VARCHAR(100) NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS threads (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER REFERENCES users(id),
+        title VARCHAR(255) NOT NULL,
+        content TEXT,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS posts (
+        id SERIAL PRIMARY KEY,
+        thread_id INTEGER REFERENCES threads(id),
+        user_id INTEGER REFERENCES users(id),
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    console.log('✅ Таблицы проверены / созданы');
+  } catch (err) {
+    console.error('❌ Ошибка при инициализации DB:', err);
+  }
+}
 
-  const res = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password })
-  });
+// ======== Фронт: отдаём index.html ========
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'index.html'));
+});
 
-  const text = await res.text();
-  alert(text);
-  if (text.includes('успешно')) {
-    document.getElementById('boardSection').classList.remove('hidden');
+// ======== API ========
+// Регистрация
+app.post('/api/register', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).send('Ник и пароль обязательны');
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id',
+      [username, password]
+    );
+    res.json({ id: result.rows[0].id });
+  } catch (err) {
+    if (err.code === '23505') res.status(400).send('Ник уже существует');
+    else res.status(500).send('Ошибка сервера');
   }
 });
 
-// ==== Создать тему ====
-const threadForm = document.getElementById('threadForm');
-threadForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  const title = document.getElementById('threadTitle').value;
-  const content = document.getElementById('threadContent').value;
-  const user_id = document.getElementById('threadUserId').value;
+// Логин
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).send('Ник и пароль обязательны');
 
-  const res = await fetch('/api/thread', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, content, user_id })
-  });
-
-  const thread = await res.json();
-  alert(`Тема создана с ID: ${thread.id}`);
-  loadThreads();
+  try {
+    const result = await pool.query(
+      'SELECT id FROM users WHERE username=$1 AND password=$2',
+      [username, password]
+    );
+    if (result.rows.length === 0) return res.status(400).send('Неверный ник или пароль');
+    res.json({ id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).send('Ошибка сервера');
+  }
 });
 
-// ==== Отобразить темы ====
-const threadsContainer = document.getElementById('threadsContainer');
-async function loadThreads() {
-  const res = await fetch('/api/threads');
-  const threads = await res.json();
-  threadsContainer.innerHTML = '';
-  threads.forEach(t => {
-    const div = document.createElement('div');
-    div.className = 'thread';
-    div.innerHTML = `<div class="thread-title" data-id="${t.id}">${t.title}</div>`;
-    threadsContainer.appendChild(div);
-  });
+// Создание темы
+app.post('/api/thread', async (req, res) => {
+  const { title, content, user_id } = req.body;
+  if (!title || !user_id) return res.status(400).send('Нужны заголовок и ID пользователя');
 
-  // Клик на тему
-  document.querySelectorAll('.thread-title').forEach(el => {
-    el.addEventListener('click', () => openThread(el.dataset.id, el.textContent));
-  });
-}
-
-// ==== Открыть тему и посты ====
-const postsSection = document.getElementById('postsSection');
-const postsContainer = document.getElementById('postsContainer');
-const currentThreadTitle = document.getElementById('currentThreadTitle');
-async function openThread(threadId, title) {
-  threadsContainer.parentElement.querySelector('#threadForm').classList.add('hidden');
-  postsSection.classList.remove('hidden');
-  currentThreadTitle.textContent = title;
-  document.getElementById('postThreadId').value = threadId;
-  loadPosts(threadId);
-}
-
-async function loadPosts(threadId) {
-  const res = await fetch(`/api/thread/${threadId}/posts`);
-  const posts = await res.json();
-  postsContainer.innerHTML = '';
-  posts.forEach(p => {
-    const div = document.createElement('div');
-    div.className = 'post';
-    div.innerHTML = `<div>User ID: ${p.user_id}</div><div class="post-content">${p.content}</div>`;
-    postsContainer.appendChild(div);
-  });
-}
-
-// ==== Создать пост ====
-const postForm = document.getElementById('postForm');
-postForm.addEventListener('submit', async e => {
-  e.preventDefault();
-  const content = document.getElementById('postContent').value;
-  const user_id = document.getElementById('postUserId').value;
-  const thread_id = document.getElementById('postThreadId').value;
-
-  const res = await fetch(`/api/thread/${thread_id}/post`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ content, user_id })
-  });
-
-  const post = await res.json();
-  alert(`Пост создан с ID: ${post.id}`);
-  document.getElementById('postContent').value = '';
-  loadPosts(thread_id);
+  try {
+    const result = await pool.query(
+      'INSERT INTO threads (title, content, user_id) VALUES ($1, $2, $3) RETURNING id',
+      [title, content, user_id]
+    );
+    res.json({ id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).send('Ошибка сервера');
+  }
 });
 
-// ==== Назад к темам ====
-document.getElementById('backToThreads').addEventListener('click', () => {
-  postsSection.classList.add('hidden');
-  threadForm.classList.remove('hidden');
+// Список тем
+app.get('/api/threads', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM threads ORDER BY created_at DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).send('Ошибка сервера');
+  }
 });
-  
-// ==== Инициализация ====
-loadThreads();
 
-</script>
-</body>
-</html>
+// Посты по теме
+app.get('/api/thread/:id/posts', async (req, res) => {
+  const threadId = req.params.id;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM posts WHERE thread_id=$1 ORDER BY created_at ASC',
+      [threadId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).send('Ошибка сервера');
+  }
+});
+
+// Создание поста
+app.post('/api/thread/:id/post', async (req, res) => {
+  const threadId = req.params.id;
+  const { content, user_id } = req.body;
+  if (!content || !user_id) return res.status(400).send('Нужны текст и ID пользователя');
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO posts (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING id',
+      [threadId, user_id, content]
+    );
+    res.json({ id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).send('Ошибка сервера');
+  }
+});
+
+// ======== СТАРТ СЕРВЕРА ========
+app.listen(PORT, async () => {
+  console.log(`🚀 fsociety running on port ${PORT}`);
+  try {
+    await pool.connect();
+    console.log('✅ PostgreSQL connected');
+    await initDB();
+  } catch (err) {
+    console.error('❌ DB INIT ERROR:', err);
+  }
+});
 
