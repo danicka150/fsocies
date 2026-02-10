@@ -1,15 +1,21 @@
 {
   "name": "fsociety-board",
   "version": "1.0.0",
-  "description": "fsociety style anonymous board with registration and PWA",
+  "description": "fsociety anonymous imageboard",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
     "express": "^4.18.2",
-    "cors": "^2.8.5",
-    "body-parser": "^1.20.2"
+    "pg": "^8.11.5",
+    "bcrypt": "^5.1.0"
   }
 }
+
+
 
