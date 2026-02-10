@@ -1,20 +1,78 @@
-<h2>Регистрация</h2>
-<form id="registerForm">
-  <input type="text" id="regUsername" placeholder="Ник" required>
-  <input type="password" id="regPassword" placeholder="Пароль" required>
-  <button type="submit">Зарегистрироваться</button>
-</form>
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FSOCIETY Board</title>
+<style>
+body { font-family: Inter, sans-serif; background: #121212; color: #eee; margin: 0; padding: 0; }
+header { background: #1a1a1a; padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; }
+header h1 { margin: 0; color: #0ff; }
+.container { padding: 20px; max-width: 800px; margin: auto; }
+form { margin-bottom: 20px; }
+input, button, textarea { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+button { background: #0ff; border: none; color: #000; cursor: pointer; }
+.thread, .post { border: 1px solid #333; padding: 10px; margin-bottom: 10px; }
+.thread-title { font-weight: bold; color: #0ff; cursor: pointer; }
+.post-content { margin-top: 5px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
 
-<h2>Логин</h2>
-<form id="loginForm">
-  <input type="text" id="logUsername" placeholder="Ник" required>
-  <input type="password" id="logPassword" placeholder="Пароль" required>
-  <button type="submit">Войти</button>
-</form>
+<header>
+  <h1>FSOCIETY</h1>
+</header>
+
+<div class="container">
+
+  <h2>Регистрация</h2>
+  <form id="registerForm">
+    <input type="text" id="regUsername" placeholder="Ник" required>
+    <input type="password" id="regPassword" placeholder="Пароль" required>
+    <button type="submit">Зарегистрироваться</button>
+  </form>
+
+  <h2>Логин</h2>
+  <form id="loginForm">
+    <input type="text" id="logUsername" placeholder="Ник" required>
+    <input type="password" id="logPassword" placeholder="Пароль" required>
+    <button type="submit">Войти</button>
+  </form>
+
+  <div id="boardSection" class="hidden">
+
+    <h2>Создать тему</h2>
+    <form id="threadForm">
+      <input type="text" id="threadTitle" placeholder="Заголовок" required>
+      <textarea id="threadContent" placeholder="Текст темы" required></textarea>
+      <input type="number" id="threadUserId" placeholder="ID пользователя" required>
+      <button type="submit">Создать тему</button>
+    </form>
+
+    <h2>Темы</h2>
+    <div id="threadsContainer"></div>
+
+    <div id="postsSection" class="hidden">
+      <h2 id="currentThreadTitle"></h2>
+      <form id="postForm">
+        <textarea id="postContent" placeholder="Написать ответ" required></textarea>
+        <input type="number" id="postUserId" placeholder="ID пользователя" required>
+        <input type="hidden" id="postThreadId">
+        <button type="submit">Отправить пост</button>
+      </form>
+      <div id="postsContainer"></div>
+      <button id="backToThreads">Назад к темам</button>
+    </div>
+
+  </div>
+
+</div>
 
 <script>
+// ==== Регистрация ====
 const registerForm = document.getElementById('registerForm');
-registerForm.addEventListener('submit', async (e) => {
+registerForm.addEventListener('submit', async e => {
   e.preventDefault();
   const username = document.getElementById('regUsername').value;
   const password = document.getElementById('regPassword').value;
@@ -26,11 +84,12 @@ registerForm.addEventListener('submit', async (e) => {
   });
 
   const text = await res.text();
-  alert(text); // Показываем ответ сервера
+  alert(text);
 });
 
+// ==== Логин ====
 const loginForm = document.getElementById('loginForm');
-loginForm.addEventListener('submit', async (e) => {
+loginForm.addEventListener('submit', async e => {
   e.preventDefault();
   const username = document.getElementById('logUsername').value;
   const password = document.getElementById('logPassword').value;
@@ -42,7 +101,104 @@ loginForm.addEventListener('submit', async (e) => {
   });
 
   const text = await res.text();
-  alert(text); // Показываем ответ сервера
+  alert(text);
+  if (text.includes('успешно')) {
+    document.getElementById('boardSection').classList.remove('hidden');
+  }
 });
+
+// ==== Создать тему ====
+const threadForm = document.getElementById('threadForm');
+threadForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = document.getElementById('threadTitle').value;
+  const content = document.getElementById('threadContent').value;
+  const user_id = document.getElementById('threadUserId').value;
+
+  const res = await fetch('/api/thread', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, content, user_id })
+  });
+
+  const thread = await res.json();
+  alert(`Тема создана с ID: ${thread.id}`);
+  loadThreads();
+});
+
+// ==== Отобразить темы ====
+const threadsContainer = document.getElementById('threadsContainer');
+async function loadThreads() {
+  const res = await fetch('/api/threads');
+  const threads = await res.json();
+  threadsContainer.innerHTML = '';
+  threads.forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'thread';
+    div.innerHTML = `<div class="thread-title" data-id="${t.id}">${t.title}</div>`;
+    threadsContainer.appendChild(div);
+  });
+
+  // Клик на тему
+  document.querySelectorAll('.thread-title').forEach(el => {
+    el.addEventListener('click', () => openThread(el.dataset.id, el.textContent));
+  });
+}
+
+// ==== Открыть тему и посты ====
+const postsSection = document.getElementById('postsSection');
+const postsContainer = document.getElementById('postsContainer');
+const currentThreadTitle = document.getElementById('currentThreadTitle');
+async function openThread(threadId, title) {
+  threadsContainer.parentElement.querySelector('#threadForm').classList.add('hidden');
+  postsSection.classList.remove('hidden');
+  currentThreadTitle.textContent = title;
+  document.getElementById('postThreadId').value = threadId;
+  loadPosts(threadId);
+}
+
+async function loadPosts(threadId) {
+  const res = await fetch(`/api/thread/${threadId}/posts`);
+  const posts = await res.json();
+  postsContainer.innerHTML = '';
+  posts.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'post';
+    div.innerHTML = `<div>User ID: ${p.user_id}</div><div class="post-content">${p.content}</div>`;
+    postsContainer.appendChild(div);
+  });
+}
+
+// ==== Создать пост ====
+const postForm = document.getElementById('postForm');
+postForm.addEventListener('submit', async e => {
+  e.preventDefault();
+  const content = document.getElementById('postContent').value;
+  const user_id = document.getElementById('postUserId').value;
+  const thread_id = document.getElementById('postThreadId').value;
+
+  const res = await fetch(`/api/thread/${thread_id}/post`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content, user_id })
+  });
+
+  const post = await res.json();
+  alert(`Пост создан с ID: ${post.id}`);
+  document.getElementById('postContent').value = '';
+  loadPosts(thread_id);
+});
+
+// ==== Назад к темам ====
+document.getElementById('backToThreads').addEventListener('click', () => {
+  postsSection.classList.add('hidden');
+  threadForm.classList.remove('hidden');
+});
+  
+// ==== Инициализация ====
+loadThreads();
+
 </script>
+</body>
+</html>
 
