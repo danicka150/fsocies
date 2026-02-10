@@ -1,168 +1,48 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-<meta charset="UTF-8">
-<title>fsociety board</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0e1621">
-<style>
-:root{
-  --bg:#0e1621;
-  --panel:#17212b;
-  --card:#1f2a36;
-  --text:#e6e6e6;
-  --muted:#8aa2b2;
-  --accent:#2aabee;
-}
-body{margin:0;font-family:Inter,sans-serif;background:var(--bg);color:var(--text);}
-header{display:flex;justify-content:space-between;align-items:center;padding:10px;background:var(--panel);}
-header h1{margin:0;color:var(--accent);}
-header button{background:var(--accent);border:none;padding:6px 12px;border-radius:8px;cursor:pointer;}
-main{max-width:700px;margin:auto;padding:10px;}
-.card{background:var(--card);border-radius:12px;padding:12px;margin-bottom:10px;}
-.card h3{margin:0 0 6px;font-size:16px;}
-.card p{margin:0;color:var(--muted);}
-textarea,input{width:100%;background:#0b141c;border:1px solid #22303c;color:var(--text);border-radius:10px;padding:10px;margin-bottom:8px;}
-button:hover{opacity:.85;}
-.thread{cursor:pointer;}
-.reply{margin-left:10px;border-left:2px solid #22303c;padding-left:8px;margin-top:6px;color:#cfd9df;}
-.footer{text-align:center;font-size:12px;color:var(--muted);margin-top:20px;}
-#loginPanel{background:var(--card);padding:12px;border-radius:12px;margin-bottom:10px;}
-</style>
-<script>
-// PWA fullscreen request
-function goFullscreen(){document.documentElement.requestFullscreen().catch(()=>{});}
-window.addEventListener('load',()=>{document.body.addEventListener('click',goFullscreen,{once:true});});
-if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(console.error);}
-</script>
-</head>
-<body>
-<header>
-<h1>fsociety</h1>
-<button onclick="showThreadForm()">Создать тред</button>
-</header>
-<main>
-<div id="loginPanel">
-<button onclick="registerUser()">Регистрация</button>
-<button onclick="loginUser()">Войти</button>
-<span id="currentUser"></span>
-</div>
+<h2>Регистрация</h2>
+<form id="registerForm">
+  <input type="text" id="regUsername" placeholder="Ник" required>
+  <input type="password" id="regPassword" placeholder="Пароль" required>
+  <button type="submit">Зарегистрироваться</button>
+</form>
 
-<div class="card" id="threadForm" style="display:none;">
-<input id="title" placeholder="Тема треда">
-<textarea id="text" placeholder="Сообщение"></textarea>
-<button onclick="createThread()">Создать</button>
-</div>
-
-<div id="threads"></div>
-<div class="footer">we are fsociety • nothing is permanent</div>
-</main>
+<h2>Логин</h2>
+<form id="loginForm">
+  <input type="text" id="logUsername" placeholder="Ник" required>
+  <input type="password" id="logPassword" placeholder="Пароль" required>
+  <button type="submit">Войти</button>
+</form>
 
 <script>
-let currentUser = null;
+const registerForm = document.getElementById('registerForm');
+registerForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('regUsername').value;
+  const password = document.getElementById('regPassword').value;
 
-async function registerUser(){
-  const username = prompt("Введите ник:");
-  const password = prompt("Введите пароль:");
-  if(!username||!password)return;
-  const res = await fetch("/api/register",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
-  const data = await res.json();
-  if(data.error){alert(data.error);return;}
-  currentUser = {userId:data.userId, username:data.username};
-  document.getElementById("currentUser").innerText = "Вы: "+currentUser.username;
-  fetchThreads();
-}
-
-async function loginUser(){
-  const username = prompt("Введите ник:");
-  const password = prompt("Введите пароль:");
-  if(!username||!password)return;
-  const res = await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username,password})});
-  const data = await res.json();
-  if(data.error){alert(data.error);return;}
-  currentUser = {userId:data.userId, username:data.username};
-  document.getElementById("currentUser").innerText = "Вы: "+currentUser.username;
-  fetchThreads();
-}
-
-// THREADS
-async function fetchThreads(){
-  const res = await fetch("/api/threads");
-  const data = await res.json();
-  renderThreads(data);
-}
-
-function renderThreads(threads){
-  const container = document.getElementById("threads");
-  container.innerHTML = "";
-  threads.forEach(t=>{
-    const card = document.createElement("div");
-    card.className="card thread";
-    card.innerHTML = `<h3>${t.title}</h3>
-      <p>${t.text.substring(0,100)}${t.text.length>100?'...':''}</p>
-      <small>${t.posts.length} ответов • ${t.username} • ${new Date(t.created).toLocaleString()}</small>`;
-    card.onclick = ()=>showThread(t);
-    container.appendChild(card);
-  });
-}
-
-function showThreadForm(){
-  if(!currentUser){alert("Войдите чтобы создать тред");return;}
-  document.getElementById("threadForm").style.display="block";
-}
-
-async function createThread(){
-  const title = document.getElementById("title").value;
-  const text = document.getElementById("text").value;
-  if(!title||!text){alert("Заполните поля");return;}
-  const res = await fetch("/api/thread",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title,text,userId:currentUser.userId})});
-  const data = await res.json();
-  document.getElementById("title").value="";
-  document.getElementById("text").value="";
-  document.getElementById("threadForm").style.display="none";
-  fetchThreads();
-}
-
-function showThread(thread){
-  const container = document.getElementById("threads");
-  container.innerHTML="";
-  const backBtn = document.createElement("button");
-  backBtn.innerText="Назад к списку";
-  backBtn.onclick=fetchThreads;
-  container.appendChild(backBtn);
-
-  const card = document.createElement("div");
-  card.className="card";
-  card.innerHTML=`<h3>${thread.title}</h3><p>${thread.text}</p>
-    <small>${thread.username} • ${new Date(thread.created).toLocaleString()}</small>`;
-  container.appendChild(card);
-
-  thread.posts.forEach(p=>{
-    const post = document.createElement("div");
-    post.className="card reply";
-    post.innerHTML=`<strong>${p.username}</strong> • ${new Date(p.created).toLocaleString()}<br>${p.text}`;
-    container.appendChild(post);
+  const res = await fetch('/api/register', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
   });
 
-  if(currentUser){
-    const replyForm = document.createElement("div");
-    replyForm.className="card";
-    replyForm.innerHTML=`<textarea id="replyText" placeholder="Ваш ответ"></textarea>
-      <button onclick="postReply(${thread.id})">Ответить</button>`;
-    container.appendChild(replyForm);
-  }
-}
+  const text = await res.text();
+  alert(text); // Показываем ответ сервера
+});
 
-async function postReply(threadId){
-  const text = document.getElementById("replyText").value;
-  if(!text){alert("Введите текст");return;}
-  await fetch(`/api/thread/${threadId}/post`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text,userId:currentUser.userId})});
-  showThread(await (await fetch("/api/threads")).json().then(ts=>ts.find(t=>t.id==threadId)));
-}
+const loginForm = document.getElementById('loginForm');
+loginForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const username = document.getElementById('logUsername').value;
+  const password = document.getElementById('logPassword').value;
 
-fetchThreads();
+  const res = await fetch('/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+
+  const text = await res.text();
+  alert(text); // Показываем ответ сервера
+});
 </script>
-</body>
-</html>
 
