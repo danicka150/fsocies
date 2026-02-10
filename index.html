@@ -1,166 +1,91 @@
 
-import express from 'express';
-import bodyParser from 'body-parser';
-import cors from 'cors';
-import pg from 'pg';
-import path from 'path';
-import { fileURLToPath } from 'url';
+<body>
+  <div id="loginStatus"></div>
+  <div id="authForm">
+    <input id="username" placeholder="Ник">
+    <input id="password" placeholder="Пароль" type="password">
+    <button id="registerBtn">Регистрация</button>
+    <button id="loginBtn">Войти</button>
+  </div>
 
-const { Pool } = pg;
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+  <div id="threadForm" style="display:none;">
+    <input id="threadTitle" placeholder="Название треда">
+    <textarea id="threadContent" placeholder="Содержимое"></textarea>
+    <button id="createThreadBtn">Создать тред</button>
+  </div>
 
-const app = express();
-const PORT = process.env.PORT || 10000;
+  <script>
+    // Показываем пользователя, если уже залогинен
+    const savedUser = localStorage.getItem('username');
+    if (savedUser) {
+      document.getElementById('loginStatus').innerText = `Вы вошли как ${savedUser}`;
+      document.getElementById('authForm').style.display = 'none';
+      document.getElementById('threadForm').style.display = 'block';
+    }
 
-app.use(cors());
-app.use(bodyParser.json());
+    // Регистрация
+    document.getElementById('registerBtn').onclick = async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('username', username);
+        localStorage.setItem('userId', data.id);
+        document.getElementById('loginStatus').innerText = `Вы вошли как ${username}`;
+        document.getElementById('authForm').style.display = 'none';
+        document.getElementById('threadForm').style.display = 'block';
+      } else {
+        alert(data.error);
+      }
+    };
 
-// ну типо вот это
-app.use(express.static(__dirname)); // папочка
+    // Вход
+    document.getElementById('loginBtn').onclick = async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      if (data.success) {
+        localStorage.setItem('username', username);
+        localStorage.setItem('userId', data.id);
+        document.getElementById('loginStatus').innerText = `Вы вошли как ${username}`;
+        document.getElementById('authForm').style.display = 'none';
+        document.getElementById('threadForm').style.display = 'block';
+      } else {
+        alert(data.error);
+      }
+    };
 
-// Подключение к какойто фигне 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+    // Создание треда
+    document.getElementById('createThreadBtn').onclick = async () => {
+      const title = document.getElementById('threadTitle').value;
+      const content = document.getElementById('threadContent').value;
+      const userId = localStorage.getItem('userId');
+      if (!userId) return alert('Необходимо войти в аккаунт');
 
-async function initDB() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(100) NOT NULL
-      );
-      CREATE TABLE IF NOT EXISTS threads (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER REFERENCES users(id),
-        title VARCHAR(255) NOT NULL,
-        content TEXT,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-      CREATE TABLE IF NOT EXISTS posts (
-        id SERIAL PRIMARY KEY,
-        thread_id INTEGER REFERENCES threads(id),
-        user_id INTEGER REFERENCES users(id),
-        content TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT NOW()
-      );
-    `);
-    console.log('я хз работает спроси у чата джпт');
-  } catch (err) {
-    console.error('ноу ноу ноу мистор фиш:', err);
-  }
-}
-
-// еще какаято очень важная хрень
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// апи
-// Рег
-app.post('/api/register', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).send('Ник и пароль обязательны');
-
-  try {
-    const result = await pool.query(
-      'INSERT INTO users (username, password) VALUES ($1, $2) RETURNING id',
-      [username, password]
-    );
-    res.json({ id: result.rows[0].id });
-  } catch (err) {
-    if (err.code === '23505') res.status(400).send('Ник уже существует');
-    else res.status(500).send('Ошибка сервера');
-  }
-});
-
-// привет ребята или как сейчас модно говорить привед медвед
-app.post('/api/login', async (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) return res.status(400).send('Ник и пароль обязательны');
-
-  try {
-    const result = await pool.query(
-      'SELECT id FROM users WHERE username=$1 AND password=$2',
-      [username, password]
-    );
-    if (result.rows.length === 0) return res.status(400).send('Неверный ник или пароль');
-    res.json({ id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).send('Ошибка сервера');
-  }
-});
-
-// темки 
-app.post('/api/thread', async (req, res) => {
-  const { title, content, user_id } = req.body;
-  if (!title || !user_id) return res.status(400).send('Нужны заголовок и ID пользователя');
-
-  try {
-    const result = await pool.query(
-      'INSERT INTO threads (title, content, user_id) VALUES ($1, $2, $3) RETURNING id',
-      [title, content, user_id]
-    );
-    res.json({ id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).send('Ошибка сервера');
-  }
-});
-
-// Списосок крутых темок
-app.get('/api/threads', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM threads ORDER BY created_at DESC');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).send('Ошибка сервера');
-  }
-});
-
-// Постики
-app.get('/api/thread/:id/posts', async (req, res) => {
-  const threadId = req.params.id;
-  try {
-    const result = await pool.query(
-      'SELECT * FROM posts WHERE thread_id=$1 ORDER BY created_at ASC',
-      [threadId]
-    );
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).send('Ошибка сервера');
-  }
-});
-
-// привет я конор и проверю как это работает на самом деле
-app.post('/api/thread/:id/post', async (req, res) => {
-  const threadId = req.params.id;
-  const { content, user_id } = req.body;
-  if (!content || !user_id) return res.status(400).send('Нужны текст и ID пользователя');
-
-  try {
-    const result = await pool.query(
-      'INSERT INTO posts (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING id',
-      [threadId, user_id, content]
-    );
-    res.json({ id: result.rows[0].id });
-  } catch (err) {
-    res.status(500).send('Ошибка сервера');
-  }
-});
-
-// ну что похимичим
-app.listen(PORT, async () => {
-  console.log(`еееее порт этого ${PORT}`);
-  try {
-    await pool.connect();
-    console.log('какаято хрень очень важная включиласб');
-    await initDB();
-  } catch (err) {
-    console.error('пацан  к успеху шел не повезло не фортануло:', err);
-  }
-});
-
+      const res = await fetch('/api/thread', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, content, user_id: userId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Тред создан!');
+        document.getElementById('threadTitle').value = '';
+        document.getElementById('threadContent').value = '';
+      } else {
+        alert(data.error);
+      }
+    };
+  </script>
+</body>
 
