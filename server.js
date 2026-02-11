@@ -1,136 +1,117 @@
-// server.js
-const express = require('express');
-const path = require('path');
-const bcrypt = require('bcrypt');
-const { Pool } = require('pg');
+const express = require("express");
+const session = require("express-session");
+const bodyParser = require("body-parser");
+const { Pool } = require("pg");
+const path = require("path");
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const PORT = process.env.PORT || 10000;
 
-// ==== Подключение к базе PostgreSQL через Render DATABASE_URL ====
+// DATABASE
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false } // для Render
+  ssl: { rejectUnauthorized: false }
 });
 
-// ==== Автоматическое создание таблиц при запуске сервера ====
+// MIDDLEWARE
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname)));
+app.use(session({
+  secret: "fsociety-secret",
+  resave: false,
+  saveUninitialized: false
+}));
+
+// CREATE TABLES
 (async () => {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    );
+  `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS threads (
-        id SERIAL PRIMARY KEY,
-        title VARCHAR(200) NOT NULL,
-        content TEXT,
-        user_id INT REFERENCES users(id),
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS threads (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id)
+    );
+  `);
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS posts (
-        id SERIAL PRIMARY KEY,
-        thread_id INT REFERENCES threads(id),
-        user_id INT REFERENCES users(id),
-        content TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    console.log('✅ Database tables are ready');
-  } catch (err) {
-    console.error('❌ Table creation error:', err);
-  }
+  console.log("✅ Database tables are ready");
 })();
 
-// ==== Статика ====
-app.use(express.static(__dirname));
+// REGISTER
+app.post("/api/register", async (req, res) => {
+  const { username, password } = req.body;
 
-// ==== Главная страница ====
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'index.html'));
-});
-
-// ==== Регистрация пользователя ====
-app.post('/api/register', async (req, res) => {
   try {
-    const { username, password } = req.body;
-    const hashed = await bcrypt.hash(password, 10);
-
-    await pool.query(
-      'INSERT INTO users (username, password) VALUES ($1, $2)',
-      [username, hashed]
-    );
-
-    res.status(200).send('User registered');
-  } catch (err) {
-    console.error('❌ Registration error:', err);
-    res.status(500).send('Error registering user');
-  }
-});
-
-// ==== Логин пользователя ====
-app.post('/api/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
     const result = await pool.query(
-      'SELECT * FROM users WHERE username = $1',
-      [username]
+      "INSERT INTO users (username, password) VALUES ($1,$2) RETURNING id, username",
+      [username, password]
     );
 
-    if (!result.rows.length) return res.status(400).send('User not found');
+    req.session.user = result.rows[0];
+    res.json({ success: true, user: result.rows[0] });
 
-    const match = await bcrypt.compare(password, result.rows[0].password);
-    if (!match) return res.status(400).send('Wrong password');
-
-    res.status(200).send('Logged in');
   } catch (err) {
-    console.error('❌ Login error:', err);
-    res.status(500).send('Error logging in');
+    res.json({ success: false, message: "User already exists" });
   }
 });
 
-// ==== Создание темы (thread) ====
-app.post('/api/thread', async (req, res) => {
-  try {
-    const { title, content, user_id } = req.body;
-    const result = await pool.query(
-      'INSERT INTO threads (title, content, user_id) VALUES ($1, $2, $3) RETURNING *',
-      [title, content, user_id]
-    );
-    res.status(200).json(result.rows[0]);
-  } catch (err) {
-    console.error('❌ Thread creation error:', err);
-    res.status(500).send('Error creating thread');
+// LOGIN
+app.post("/api/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  const result = await pool.query(
+    "SELECT id, username FROM users WHERE username=$1 AND password=$2",
+    [username, password]
+  );
+
+  if (result.rows.length > 0) {
+    req.session.user = result.rows[0];
+    res.json({ success: true, user: result.rows[0] });
+  } else {
+    res.json({ success: false, message: "Invalid credentials" });
   }
 });
 
-// ==== Создание поста в теме ====
-app.post('/api/post', async (req, res) => {
-  try {
-    const { thread_id, user_id, content } = req.body;
-    const result = await pool.query(
-      'INSERT INTO posts (thread_id, user_id, content) VALUES ($1, $2, $3) RETURNING *',
-      [thread_id, user_id, content]
-    );
-    res.status(200).json(result.rows[0]);
-  } catch (err) {
-    console.error('❌ Post creation error:', err);
-    res.status(500).send('Error creating post');
-  }
+// CURRENT USER
+app.get("/api/me", (req, res) => {
+  res.json({ user: req.session.user || null });
 });
 
-// ==== Запуск сервера ====
-const PORT = process.env.PORT || 10000;
+// CREATE THREAD
+app.post("/api/thread", async (req, res) => {
+  if (!req.session.user) {
+    return res.json({ success: false, message: "Необходимо войти в аккаунт" });
+  }
+
+  const { title } = req.body;
+
+  await pool.query(
+    "INSERT INTO threads (title, user_id) VALUES ($1,$2)",
+    [title, req.session.user.id]
+  );
+
+  res.json({ success: true });
+});
+
+// GET THREADS
+app.get("/api/threads", async (req, res) => {
+  const result = await pool.query(`
+    SELECT threads.id, threads.title, users.username
+    FROM threads
+    JOIN users ON users.id = threads.user_id
+    ORDER BY threads.id DESC
+  `);
+
+  res.json(result.rows);
+});
+
 app.listen(PORT, () => {
-  console.log(`🚀 fsociety running on port ${PORT}`);
+  console.log("🚀 fsociety running on port", PORT);
 });
+
