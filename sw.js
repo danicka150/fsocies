@@ -1,15 +1,22 @@
-self.addEventListener("install", event => {
-  self.skipWaiting();
+const cacheName = "fsociety-cache-v1";
+const assets = [
+  "/",
+  "/index.html",
+  "/manifest.json",
+  "/sw.js"
+];
+
+self.addEventListener("install", e => {
+  e.waitUntil(
+    caches.open(cacheName).then(cache => cache.addAll(assets))
+  );
 });
 
-self.addEventListener("fetch", event => {
-  // НЕ кэшируем API
-  if (event.request.url.includes("/register") ||
-      event.request.url.includes("/login") ||
-      event.request.url.includes("/threads") ||
-      event.request.url.includes("/me")) {
-    return;
-  }
+self.addEventListener("fetch", e => {
+  e.respondWith(
+    caches.match(e.request).then(r => r || fetch(e.request))
+  );
 });
+
 
 
