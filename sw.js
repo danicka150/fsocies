@@ -1,15 +1,15 @@
-const CACHE_NAME = "fsociety-cache-v1";
-const urlsToCache = ["/","/index.html"];
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => cache.addAll(urlsToCache))
-  );
+self.addEventListener("install", event => {
+  self.skipWaiting();
 });
 
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then(response => response || fetch(event.request))
-  );
+self.addEventListener("fetch", event => {
+  // НЕ кэшируем API
+  if (event.request.url.includes("/register") ||
+      event.request.url.includes("/login") ||
+      event.request.url.includes("/threads") ||
+      event.request.url.includes("/me")) {
+    return;
+  }
 });
+
 
