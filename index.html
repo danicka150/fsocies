@@ -1,117 +1,120 @@
-
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>Fsociety Board</title>
+<title>FSociety Board</title>
+<link rel="manifest" href="/manifest.json">
+<style>
+body {
+  background: #0f0f0f;
+  color: #00ff88;
+  font-family: monospace;
+  padding: 40px;
+}
+input, button {
+  width: 100%;
+  padding: 10px;
+  margin: 5px 0;
+  background: #1a1a1a;
+  border: 1px solid #00ff88;
+  color: #00ff88;
+}
+button:hover {
+  background: #00ff88;
+  color: black;
+}
+.thread {
+  border: 1px solid #00ff88;
+  padding: 10px;
+  margin-top: 10px;
+}
+</style>
 </head>
 <body>
 
-<h1>Fsociety Board</h1>
+<h1>FSociety Board</h1>
+<h3 id="status">Проверка...</h3>
 
-<div id="auth">
-  <input id="username" placeholder="Username">
-  <input id="password" type="password" placeholder="Password">
-  <button onclick="register()">Register</button>
-  <button onclick="login()">Login</button>
-</div>
+<h2>Регистрация</h2>
+<input id="regUser" placeholder="Username">
+<input id="regPass" type="password" placeholder="Password">
+<button onclick="register()">Зарегистрироваться</button>
 
-<div id="user"></div>
+<h2>Вход</h2>
+<input id="logUser" placeholder="Username">
+<input id="logPass" type="password" placeholder="Password">
+<button onclick="login()">Войти</button>
 
-<hr>
+<h2>Создать тред</h2>
+<input id="threadTitle" placeholder="Название">
+<button onclick="createThread()">Создать</button>
 
-<h2>Create Thread</h2>
-<input id="threadTitle" placeholder="Thread title">
-<button onclick="createThread()">Create</button>
-
-<hr>
-
-<h2>Threads</h2>
+<h2>Треды</h2>
 <div id="threads"></div>
 
 <script>
 async function register() {
-  const username = usernameInput.value;
-  const password = passwordInput.value;
-
-  const res = await fetch("/api/register", {
+  const res = await fetch("/register", {
     method: "POST",
     headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({username, password})
+    body: JSON.stringify({
+      username: regUser.value,
+      password: regPass.value
+    })
   });
-
-  const data = await res.json();
-  if (data.success) {
-    updateUser(data.user);
-  } else {
-    alert(data.message);
-  }
+  alert((await res.json()).message || (await res.json()).error);
 }
 
 async function login() {
-  const username = usernameInput.value;
-  const password = passwordInput.value;
-
-  const res = await fetch("/api/login", {
+  const res = await fetch("/login", {
     method: "POST",
     headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({username, password})
+    body: JSON.stringify({
+      username: logUser.value,
+      password: logPass.value
+    })
   });
-
-  const data = await res.json();
-  if (data.success) {
-    updateUser(data.user);
-  } else {
-    alert(data.message);
-  }
+  alert((await res.json()).message || (await res.json()).error);
+  checkAuth();
 }
 
-function updateUser(user) {
-  document.getElementById("auth").style.display = "none";
-  document.getElementById("user").innerText = "Вы вошли как: " + user.username;
-}
-
-async function checkUser() {
-  const res = await fetch("/api/me");
+async function checkAuth() {
+  const res = await fetch("/me");
   const data = await res.json();
-  if (data.user) {
-    updateUser(data.user);
-  }
+  status.innerText = data.loggedIn
+    ? "Вы вошли как: " + data.username
+    : "Вы не вошли";
 }
 
 async function createThread() {
-  const title = threadTitle.value;
-
-  const res = await fetch("/api/thread", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({title})
+  const res = await fetch("/threads", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ title: threadTitle.value })
   });
-
-  const data = await res.json();
-  if (data.success) {
-    loadThreads();
-  } else {
-    alert(data.message);
-  }
+  alert((await res.json()).message || (await res.json()).error);
+  loadThreads();
 }
 
 async function loadThreads() {
-  const res = await fetch("/api/threads");
-  const data = await res.json();
-
-  const container = document.getElementById("threads");
-  container.innerHTML = "";
-
-  data.forEach(t => {
-    container.innerHTML += "<p><b>" + t.title + "</b> — " + t.username + "</p>";
+  const res = await fetch("/threads");
+  const threads = await res.json();
+  threadsDiv = document.getElementById("threads");
+  threadsDiv.innerHTML = "";
+  threads.forEach(t=>{
+    threadsDiv.innerHTML +=
+      `<div class="thread"><b>${t.title}</b><br>Автор: ${t.author}</div>`;
   });
 }
 
-checkUser();
+checkAuth();
 loadThreads();
+
+// Service Worker
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("/sw.js");
+}
 </script>
 
 </body>
 </html>
-
