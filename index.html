@@ -2,118 +2,219 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<title>FSociety Board</title>
-<link rel="manifest" href="/manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fsociety Board</title>
 <style>
-body {
-  background: #0f0f0f;
-  color: #00ff88;
-  font-family: monospace;
-  padding: 40px;
-}
-input, button {
-  width: 100%;
-  padding: 10px;
-  margin: 5px 0;
-  background: #1a1a1a;
-  border: 1px solid #00ff88;
-  color: #00ff88;
-}
-button:hover {
-  background: #00ff88;
-  color: black;
-}
-.thread {
-  border: 1px solid #00ff88;
-  padding: 10px;
-  margin-top: 10px;
-}
+    body {
+        font-family: "Arial", sans-serif;
+        background: #121212;
+        color: #eee;
+        margin: 0;
+        padding: 0;
+    }
+    header {
+        background: #1a1a1a;
+        padding: 10px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #333;
+    }
+    header h1 {
+        margin: 0;
+        font-size: 24px;
+    }
+    .auth {
+        display: flex;
+        gap: 10px;
+    }
+    .auth button {
+        background: #333;
+        border: 1px solid #555;
+        color: #eee;
+        padding: 5px 10px;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+    .auth button:hover {
+        background: #444;
+    }
+    #loginForm, #registerForm, #createThreadForm {
+        display: none;
+        flex-direction: column;
+        gap: 10px;
+        background: #1e1e1e;
+        padding: 15px;
+        border-radius: 6px;
+        margin: 20px;
+        max-width: 400px;
+    }
+    input {
+        padding: 8px;
+        border-radius: 4px;
+        border: 1px solid #555;
+        background: #222;
+        color: #eee;
+    }
+    input::placeholder {
+        color: #888;
+    }
+    button.submit {
+        background: #0f9d58;
+        border: none;
+        color: #fff;
+        padding: 10px;
+        cursor: pointer;
+        border-radius: 4px;
+    }
+    button.submit:hover {
+        background: #0c7c43;
+    }
+    #threads {
+        margin: 20px;
+    }
+    .thread {
+        background: #1e1e1e;
+        padding: 10px;
+        border-radius: 6px;
+        margin-bottom: 10px;
+    }
 </style>
 </head>
 <body>
 
-<h1>FSociety Board</h1>
-<h3 id="status">Проверка...</h3>
+<header>
+    <h1>fsociety Board</h1>
+    <div class="auth" id="authButtons">
+        <button id="showLogin">Войти</button>
+        <button id="showRegister">Регистрация</button>
+    </div>
+    <div class="auth" id="userPanel" style="display:none;">
+        <span id="userName"></span>
+        <button id="logout">Выйти</button>
+    </div>
+</header>
 
-<h2>Регистрация</h2>
-<input id="regUser" placeholder="Username">
-<input id="regPass" type="password" placeholder="Password">
-<button onclick="register()">Зарегистрироваться</button>
+<!-- Формы -->
+<form id="loginForm">
+    <input type="text" id="loginNick" placeholder="Ник" required>
+    <input type="password" id="loginPass" placeholder="Пароль" required>
+    <button type="submit" class="submit">Войти</button>
+</form>
 
-<h2>Вход</h2>
-<input id="logUser" placeholder="Username">
-<input id="logPass" type="password" placeholder="Password">
-<button onclick="login()">Войти</button>
+<form id="registerForm">
+    <input type="text" id="regNick" placeholder="Ник" required>
+    <input type="password" id="regPass" placeholder="Пароль" required>
+    <button type="submit" class="submit">Зарегистрироваться</button>
+</form>
 
-<h2>Создать тред</h2>
-<input id="threadTitle" placeholder="Название">
-<button onclick="createThread()">Создать</button>
+<form id="createThreadForm">
+    <input type="text" id="threadTitle" placeholder="Название треда" required>
+    <button type="submit" class="submit">Создать тред</button>
+</form>
 
-<h2>Треды</h2>
 <div id="threads"></div>
 
 <script>
-async function register() {
-  const res = await fetch("/register", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      username: regUser.value,
-      password: regPass.value
-    })
-  });
-  alert((await res.json()).message || (await res.json()).error);
+let currentUser = null;
+
+// Показывать/скрывать формы
+document.getElementById("showLogin").onclick = () => {
+    document.getElementById("loginForm").style.display = "flex";
+    document.getElementById("registerForm").style.display = "none";
+};
+document.getElementById("showRegister").onclick = () => {
+    document.getElementById("registerForm").style.display = "flex";
+    document.getElementById("loginForm").style.display = "none";
+};
+
+// Регистрация
+document.getElementById("registerForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const nick = document.getElementById("regNick").value;
+    const pass = document.getElementById("regPass").value;
+    const res = await fetch("/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nick, pass })
+    });
+    const data = await res.json();
+    alert(data.message);
+    if(data.success) showUser(nick);
+};
+
+// Вход
+document.getElementById("loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const nick = document.getElementById("loginNick").value;
+    const pass = document.getElementById("loginPass").value;
+    const res = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nick, pass })
+    });
+    const data = await res.json();
+    if(data.success) {
+        showUser(nick);
+    } else {
+        alert(data.message);
+    }
+};
+
+// Создать тред
+document.getElementById("createThreadForm").onsubmit = async (e) => {
+    e.preventDefault();
+    if(!currentUser) return alert("Необходимо войти в аккаунт");
+    const title = document.getElementById("threadTitle").value;
+    const res = await fetch("/thread", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title })
+    });
+    const data = await res.json();
+    if(data.success) {
+        loadThreads();
+        document.getElementById("threadTitle").value = "";
+    } else {
+        alert(data.message);
+    }
+};
+
+// Показать имя пользователя и кнопки
+function showUser(nick) {
+    currentUser = nick;
+    document.getElementById("userPanel").style.display = "flex";
+    document.getElementById("authButtons").style.display = "none";
+    document.getElementById("userName").textContent = nick;
+    document.getElementById("loginForm").style.display = "none";
+    document.getElementById("registerForm").style.display = "none";
+    document.getElementById("createThreadForm").style.display = "flex";
 }
 
-async function login() {
-  const res = await fetch("/login", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({
-      username: logUser.value,
-      password: logPass.value
-    })
-  });
-  alert((await res.json()).message || (await res.json()).error);
-  checkAuth();
-}
+// Выйти
+document.getElementById("logout").onclick = () => {
+    currentUser = null;
+    document.getElementById("userPanel").style.display = "none";
+    document.getElementById("authButtons").style.display = "flex";
+    document.getElementById("createThreadForm").style.display = "none";
+};
 
-async function checkAuth() {
-  const res = await fetch("/me");
-  const data = await res.json();
-  status.innerText = data.loggedIn
-    ? "Вы вошли как: " + data.username
-    : "Вы не вошли";
-}
-
-async function createThread() {
-  const res = await fetch("/threads", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ title: threadTitle.value })
-  });
-  alert((await res.json()).message || (await res.json()).error);
-  loadThreads();
-}
-
+// Загрузка тредов
 async function loadThreads() {
-  const res = await fetch("/threads");
-  const threads = await res.json();
-  threadsDiv = document.getElementById("threads");
-  threadsDiv.innerHTML = "";
-  threads.forEach(t=>{
-    threadsDiv.innerHTML +=
-      `<div class="thread"><b>${t.title}</b><br>Автор: ${t.author}</div>`;
-  });
+    const res = await fetch("/threads");
+    const threads = await res.json();
+    const container = document.getElementById("threads");
+    container.innerHTML = "";
+    threads.forEach(t => {
+        const div = document.createElement("div");
+        div.className = "thread";
+        div.textContent = t.title + " (создал: " + t.author + ")";
+        container.appendChild(div);
+    });
 }
 
-checkAuth();
+// Старт
 loadThreads();
-
-// Service Worker
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("/sw.js");
-}
 </script>
 
 </body>
