@@ -1,21 +1,9 @@
 {
-  "name": "fsociety board",
-  "short_name": "fsociety",
+  "name": "FSociety Board",
+  "short_name": "Board",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0e1621",
-  "theme_color": "#0e1621",
-  "icons": [
-    {
-      "src": "icon.png",
-      "sizes": "192x192",
-      "type": "image/png"
-    },
-    {
-      "src": "icon.png",
-      "sizes": "512x512",
-      "type": "image/png"
-    }
-  ]
+  "background_color": "#0f0f0f",
+  "theme_color": "#00ff88",
+  "icons": []
 }
-
