@@ -1,76 +1,96 @@
-const express = require("express");
+
+ const express = require("express");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
-const Database = require("better-sqlite3");
+const { Pool } = require("pg");
 
 const app = express();
-const db = new Database("database.db");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static(__dirname));
+
+app.set("trust proxy", 1);
 
 app.use(session({
   secret: "supersecretkey",
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false }
+  cookie: { secure: true }
 }));
 
-// --- Создание таблиц ---
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE,
-  password TEXT
-);
+// PostgreSQL Render
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
 
-CREATE TABLE IF NOT EXISTS threads (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  title TEXT,
-  author TEXT
-);
-`);
+// Создание таблиц
+async function initDB() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL
+    );
+  `);
 
-// --- Регистрация ---
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS threads (
+      id SERIAL PRIMARY KEY,
+      title TEXT NOT NULL,
+      author TEXT NOT NULL
+    );
+  `);
+
+  console.log("Database ready");
+}
+
+initDB();
+
+// Регистрация
 app.post("/register", async (req, res) => {
   const { username, password } = req.body;
 
   if (!username || !password)
-    return res.status(400).json({ error: "Заполни всё" });
+    return res.json({ error: "Заполни всё" });
 
-  const hashed = await bcrypt.hash(password, 10);
+  const hash = await bcrypt.hash(password, 10);
 
   try {
-    db.prepare("INSERT INTO users (username, password) VALUES (?, ?)")
-      .run(username, hashed);
-
+    await pool.query(
+      "INSERT INTO users (username, password) VALUES ($1,$2)",
+      [username, hash]
+    );
     res.json({ message: "Регистрация успешна" });
   } catch {
-    res.status(400).json({ error: "Пользователь уже существует" });
+    res.json({ error: "Пользователь уже существует" });
   }
 });
 
-// --- Логин ---
+// Логин
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  const user = db.prepare("SELECT * FROM users WHERE username = ?")
-    .get(username);
+  const result = await pool.query(
+    "SELECT * FROM users WHERE username=$1",
+    [username]
+  );
 
-  if (!user)
-    return res.status(400).json({ error: "Пользователь не найден" });
+  if (result.rows.length === 0)
+    return res.json({ error: "Пользователь не найден" });
 
+  const user = result.rows[0];
   const valid = await bcrypt.compare(password, user.password);
 
   if (!valid)
-    return res.status(400).json({ error: "Неверный пароль" });
+    return res.json({ error: "Неверный пароль" });
 
   req.session.user = user.username;
-
   res.json({ message: "Вход выполнен" });
 });
 
-// --- Проверка сессии ---
+// Проверка сессии
 app.get("/me", (req, res) => {
   if (!req.session.user)
     return res.json({ loggedIn: false });
@@ -78,23 +98,27 @@ app.get("/me", (req, res) => {
   res.json({ loggedIn: true, username: req.session.user });
 });
 
-// --- Создание треда ---
-app.post("/threads", (req, res) => {
+// Создание треда
+app.post("/threads", async (req, res) => {
   if (!req.session.user)
-    return res.status(401).json({ error: "Необходимо войти" });
+    return res.json({ error: "Необходимо войти" });
 
   const { title } = req.body;
 
-  db.prepare("INSERT INTO threads (title, author) VALUES (?, ?)")
-    .run(title, req.session.user);
+  await pool.query(
+    "INSERT INTO threads (title, author) VALUES ($1,$2)",
+    [title, req.session.user]
+  );
 
   res.json({ message: "Тред создан" });
 });
 
-// --- Получить все треды ---
-app.get("/threads", (req, res) => {
-  const threads = db.prepare("SELECT * FROM threads").all();
-  res.json(threads);
+// Получить треды
+app.get("/threads", async (req, res) => {
+  const result = await pool.query(
+    "SELECT * FROM threads ORDER BY id DESC"
+  );
+  res.json(result.rows);
 });
 
 const PORT = process.env.PORT || 3000;
