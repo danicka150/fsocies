@@ -1,117 +1,102 @@
 const express = require("express");
 const session = require("express-session");
-const bodyParser = require("body-parser");
-const { Pool } = require("pg");
-const path = require("path");
+const bcrypt = require("bcrypt");
+const Database = require("better-sqlite3");
 
 const app = express();
-const PORT = process.env.PORT || 10000;
+const db = new Database("database.db");
 
-// DATABASE
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// MIDDLEWARE
-app.use(bodyParser.json());
-app.use(express.static(path.join(__dirname)));
 app.use(session({
-  secret: "fsociety-secret",
+  secret: "supersecretkey",
   resave: false,
-  saveUninitialized: false
+  saveUninitialized: false,
+  cookie: { secure: false }
 }));
 
-// CREATE TABLES
-(async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      username TEXT UNIQUE NOT NULL,
-      password TEXT NOT NULL
-    );
-  `);
+// --- Создание таблиц ---
+db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  username TEXT UNIQUE,
+  password TEXT
+);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS threads (
-      id SERIAL PRIMARY KEY,
-      title TEXT NOT NULL,
-      user_id INTEGER REFERENCES users(id)
-    );
-  `);
+CREATE TABLE IF NOT EXISTS threads (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT,
+  author TEXT
+);
+`);
 
-  console.log("✅ Database tables are ready");
-})();
-
-// REGISTER
-app.post("/api/register", async (req, res) => {
+// --- Регистрация ---
+app.post("/register", async (req, res) => {
   const { username, password } = req.body;
+
+  if (!username || !password)
+    return res.status(400).json({ error: "Заполни всё" });
+
+  const hashed = await bcrypt.hash(password, 10);
 
   try {
-    const result = await pool.query(
-      "INSERT INTO users (username, password) VALUES ($1,$2) RETURNING id, username",
-      [username, password]
-    );
+    db.prepare("INSERT INTO users (username, password) VALUES (?, ?)")
+      .run(username, hashed);
 
-    req.session.user = result.rows[0];
-    res.json({ success: true, user: result.rows[0] });
-
-  } catch (err) {
-    res.json({ success: false, message: "User already exists" });
+    res.json({ message: "Регистрация успешна" });
+  } catch {
+    res.status(400).json({ error: "Пользователь уже существует" });
   }
 });
 
-// LOGIN
-app.post("/api/login", async (req, res) => {
+// --- Логин ---
+app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
-  const result = await pool.query(
-    "SELECT id, username FROM users WHERE username=$1 AND password=$2",
-    [username, password]
-  );
+  const user = db.prepare("SELECT * FROM users WHERE username = ?")
+    .get(username);
 
-  if (result.rows.length > 0) {
-    req.session.user = result.rows[0];
-    res.json({ success: true, user: result.rows[0] });
-  } else {
-    res.json({ success: false, message: "Invalid credentials" });
-  }
+  if (!user)
+    return res.status(400).json({ error: "Пользователь не найден" });
+
+  const valid = await bcrypt.compare(password, user.password);
+
+  if (!valid)
+    return res.status(400).json({ error: "Неверный пароль" });
+
+  req.session.user = user.username;
+
+  res.json({ message: "Вход выполнен" });
 });
 
-// CURRENT USER
-app.get("/api/me", (req, res) => {
-  res.json({ user: req.session.user || null });
+// --- Проверка сессии ---
+app.get("/me", (req, res) => {
+  if (!req.session.user)
+    return res.json({ loggedIn: false });
+
+  res.json({ loggedIn: true, username: req.session.user });
 });
 
-// CREATE THREAD
-app.post("/api/thread", async (req, res) => {
-  if (!req.session.user) {
-    return res.json({ success: false, message: "Необходимо войти в аккаунт" });
-  }
+// --- Создание треда ---
+app.post("/threads", (req, res) => {
+  if (!req.session.user)
+    return res.status(401).json({ error: "Необходимо войти" });
 
   const { title } = req.body;
 
-  await pool.query(
-    "INSERT INTO threads (title, user_id) VALUES ($1,$2)",
-    [title, req.session.user.id]
-  );
+  db.prepare("INSERT INTO threads (title, author) VALUES (?, ?)")
+    .run(title, req.session.user);
 
-  res.json({ success: true });
+  res.json({ message: "Тред создан" });
 });
 
-// GET THREADS
-app.get("/api/threads", async (req, res) => {
-  const result = await pool.query(`
-    SELECT threads.id, threads.title, users.username
-    FROM threads
-    JOIN users ON users.id = threads.user_id
-    ORDER BY threads.id DESC
-  `);
-
-  res.json(result.rows);
+// --- Получить все треды ---
+app.get("/threads", (req, res) => {
+  const threads = db.prepare("SELECT * FROM threads").all();
+  res.json(threads);
 });
 
-app.listen(PORT, () => {
-  console.log("🚀 fsociety running on port", PORT);
-});
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("Server started"));
 
