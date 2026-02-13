@@ -3,219 +3,129 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>fsociety Board</title>
+<title>Fsociety Board</title>
+<link rel="manifest" href="manifest.json">
 <style>
-    body {
-        font-family: "Arial", sans-serif;
-        background: #121212;
-        color: #eee;
-        margin: 0;
-        padding: 0;
-    }
-    header {
-        background: #1a1a1a;
-        padding: 10px 20px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        border-bottom: 1px solid #333;
-    }
-    header h1 {
-        margin: 0;
-        font-size: 24px;
-    }
-    .auth {
-        display: flex;
-        gap: 10px;
-    }
-    .auth button {
-        background: #333;
-        border: 1px solid #555;
-        color: #eee;
-        padding: 5px 10px;
-        cursor: pointer;
-        border-radius: 4px;
-    }
-    .auth button:hover {
-        background: #444;
-    }
-    #loginForm, #registerForm, #createThreadForm {
-        display: none;
-        flex-direction: column;
-        gap: 10px;
-        background: #1e1e1e;
-        padding: 15px;
-        border-radius: 6px;
-        margin: 20px;
-        max-width: 400px;
-    }
-    input {
-        padding: 8px;
-        border-radius: 4px;
-        border: 1px solid #555;
-        background: #222;
-        color: #eee;
-    }
-    input::placeholder {
-        color: #888;
-    }
-    button.submit {
-        background: #0f9d58;
-        border: none;
-        color: #fff;
-        padding: 10px;
-        cursor: pointer;
-        border-radius: 4px;
-    }
-    button.submit:hover {
-        background: #0c7c43;
-    }
-    #threads {
-        margin: 20px;
-    }
-    .thread {
-        background: #1e1e1e;
-        padding: 10px;
-        border-radius: 6px;
-        margin-bottom: 10px;
-    }
+  body { font-family: Arial, sans-serif; background: #111; color: #eee; margin:0; padding:0; display:flex; flex-direction:column; align-items:center; }
+  h1 { margin: 20px 0; color: #00ff00; text-shadow: 0 0 5px #0f0; }
+  .container { max-width: 500px; width: 90%; padding: 20px; background: #222; border-radius: 8px; margin-bottom: 20px; }
+  input, button, textarea { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: none; }
+  button { background: #00ff00; color: #000; font-weight: bold; cursor: pointer; }
+  button:hover { background: #0f0; }
+  .hidden { display: none; }
+  .thread { background: #333; padding: 10px; border-radius: 5px; margin: 5px 0; }
+  .author { font-weight: bold; color: #0f0; }
+  .content { margin-top: 5px; }
 </style>
 </head>
 <body>
 
-<header>
-    <h1>fsociety Board</h1>
-    <div class="auth" id="authButtons">
-        <button id="showLogin">Войти</button>
-        <button id="showRegister">Регистрация</button>
-    </div>
-    <div class="auth" id="userPanel" style="display:none;">
-        <span id="userName"></span>
-        <button id="logout">Выйти</button>
-    </div>
-</header>
+<h1>Fsociety Board</h1>
 
-<!-- Формы -->
-<form id="loginForm">
-    <input type="text" id="loginNick" placeholder="Ник" required>
-    <input type="password" id="loginPass" placeholder="Пароль" required>
-    <button type="submit" class="submit">Войти</button>
-</form>
+<div class="container" id="auth-container">
+  <h2>Регистрация</h2>
+  <input type="text" id="reg-username" placeholder="Никнейм">
+  <input type="password" id="reg-password" placeholder="Пароль">
+  <button id="register-btn">Зарегистрироваться</button>
 
-<form id="registerForm">
-    <input type="text" id="regNick" placeholder="Ник" required>
-    <input type="password" id="regPass" placeholder="Пароль" required>
-    <button type="submit" class="submit">Зарегистрироваться</button>
-</form>
+  <h2>Логин</h2>
+  <input type="text" id="login-username" placeholder="Никнейм">
+  <input type="password" id="login-password" placeholder="Пароль">
+  <button id="login-btn">Войти</button>
 
-<form id="createThreadForm">
-    <input type="text" id="threadTitle" placeholder="Название треда" required>
-    <button type="submit" class="submit">Создать тред</button>
-</form>
+  <div id="auth-msg"></div>
+</div>
 
-<div id="threads"></div>
+<div class="container hidden" id="board-container">
+  <div>
+    <span>Привет, <span id="user-name"></span>!</span>
+    <button id="logout-btn">Выйти</button>
+  </div>
+
+  <h2>Создать тред</h2>
+  <textarea id="thread-content" placeholder="Что хочешь написать?"></textarea>
+  <button id="create-thread-btn">Создать тред</button>
+
+  <h2>Треды</h2>
+  <div id="threads"></div>
+</div>
 
 <script>
-let currentUser = null;
+async function api(path, data, method="POST") {
+  const res = await fetch(path, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: data ? JSON.stringify(data) : null
+  });
+  return res.json();
+}
 
-// Показывать/скрывать формы
-document.getElementById("showLogin").onclick = () => {
-    document.getElementById("loginForm").style.display = "flex";
-    document.getElementById("registerForm").style.display = "none";
-};
-document.getElementById("showRegister").onclick = () => {
-    document.getElementById("registerForm").style.display = "flex";
-    document.getElementById("loginForm").style.display = "none";
-};
+const authContainer = document.getElementById("auth-container");
+const boardContainer = document.getElementById("board-container");
+const authMsg = document.getElementById("auth-msg");
+const userNameSpan = document.getElementById("user-name");
+const threadsDiv = document.getElementById("threads");
 
 // Регистрация
-document.getElementById("registerForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const nick = document.getElementById("regNick").value;
-    const pass = document.getElementById("regPass").value;
-    const res = await fetch("/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nick, pass })
-    });
-    const data = await res.json();
-    alert(data.message);
-    if(data.success) showUser(nick);
+document.getElementById("register-btn").onclick = async () => {
+  const username = document.getElementById("reg-username").value;
+  const password = document.getElementById("reg-password").value;
+  const res = await api("/register", { username, password });
+  authMsg.textContent = res.success ? "Регистрация успешна!" : res.msg;
 };
 
-// Вход
-document.getElementById("loginForm").onsubmit = async (e) => {
-    e.preventDefault();
-    const nick = document.getElementById("loginNick").value;
-    const pass = document.getElementById("loginPass").value;
-    const res = await fetch("/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nick, pass })
-    });
-    const data = await res.json();
-    if(data.success) {
-        showUser(nick);
-    } else {
-        alert(data.message);
-    }
+// Логин
+document.getElementById("login-btn").onclick = async () => {
+  const username = document.getElementById("login-username").value;
+  const password = document.getElementById("login-password").value;
+  const res = await api("/login", { username, password });
+  if (res.success) {
+    showBoard(res.username);
+  } else authMsg.textContent = res.msg;
+};
+
+// Выход
+document.getElementById("logout-btn").onclick = async () => {
+  await api("/logout", null);
+  boardContainer.classList.add("hidden");
+  authContainer.classList.remove("hidden");
 };
 
 // Создать тред
-document.getElementById("createThreadForm").onsubmit = async (e) => {
-    e.preventDefault();
-    if(!currentUser) return alert("Необходимо войти в аккаунт");
-    const title = document.getElementById("threadTitle").value;
-    const res = await fetch("/thread", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title })
-    });
-    const data = await res.json();
-    if(data.success) {
-        loadThreads();
-        document.getElementById("threadTitle").value = "";
-    } else {
-        alert(data.message);
-    }
+document.getElementById("create-thread-btn").onclick = async () => {
+  const content = document.getElementById("thread-content").value;
+  const res = await api("/thread", { content });
+  if (res.success) {
+    document.getElementById("thread-content").value = "";
+    loadThreads();
+  } else alert(res.msg);
 };
 
-// Показать имя пользователя и кнопки
-function showUser(nick) {
-    currentUser = nick;
-    document.getElementById("userPanel").style.display = "flex";
-    document.getElementById("authButtons").style.display = "none";
-    document.getElementById("userName").textContent = nick;
-    document.getElementById("loginForm").style.display = "none";
-    document.getElementById("registerForm").style.display = "none";
-    document.getElementById("createThreadForm").style.display = "flex";
+// Показать доску
+function showBoard(username) {
+  userNameSpan.textContent = username;
+  authContainer.classList.add("hidden");
+  boardContainer.classList.remove("hidden");
+  loadThreads();
 }
-
-// Выйти
-document.getElementById("logout").onclick = () => {
-    currentUser = null;
-    document.getElementById("userPanel").style.display = "none";
-    document.getElementById("authButtons").style.display = "flex";
-    document.getElementById("createThreadForm").style.display = "none";
-};
 
 // Загрузка тредов
 async function loadThreads() {
-    const res = await fetch("/threads");
-    const threads = await res.json();
-    const container = document.getElementById("threads");
-    container.innerHTML = "";
-    threads.forEach(t => {
-        const div = document.createElement("div");
-        div.className = "thread";
-        div.textContent = t.title + " (создал: " + t.author + ")";
-        container.appendChild(div);
-    });
+  const threads = await api("/threads", null, "GET");
+  threadsDiv.innerHTML = "";
+  threads.forEach(t => {
+    const div = document.createElement("div");
+    div.className = "thread";
+    div.innerHTML = `<div class="author">${t.author}</div><div class="content">${t.content}</div>`;
+    threadsDiv.appendChild(div);
+  });
 }
 
-// Старт
-loadThreads();
+// Проверка сессии
+(async () => {
+  const me = await api("/me", null, "GET");
+  if (me.loggedIn) showBoard(me.username);
+})();
 </script>
-
 </body>
 </html>
