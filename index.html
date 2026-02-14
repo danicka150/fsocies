@@ -1,131 +1,108 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Fsociety Board</title>
-<link rel="manifest" href="manifest.json">
-<style>
-  body { font-family: Arial, sans-serif; background: #111; color: #eee; margin:0; padding:0; display:flex; flex-direction:column; align-items:center; }
-  h1 { margin: 20px 0; color: #00ff00; text-shadow: 0 0 5px #0f0; }
-  .container { max-width: 500px; width: 90%; padding: 20px; background: #222; border-radius: 8px; margin-bottom: 20px; }
-  input, button, textarea { width: 100%; padding: 10px; margin: 5px 0; border-radius: 5px; border: none; }
-  button { background: #00ff00; color: #000; font-weight: bold; cursor: pointer; }
-  button:hover { background: #0f0; }
-  .hidden { display: none; }
-  .thread { background: #333; padding: 10px; border-radius: 5px; margin: 5px 0; }
-  .author { font-weight: bold; color: #0f0; }
-  .content { margin-top: 5px; }
-</style>
+  <meta charset="UTF-8">
+  <title>Fsocies</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    body {
+      margin: 0;
+      background: #0f0f0f;
+      color: #eaeaea;
+      font-family: Arial, sans-serif;
+    }
+
+    header {
+      background: #111;
+      padding: 15px;
+      text-align: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #9b59ff;
+      border-bottom: 1px solid #222;
+    }
+
+    .container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 80vh;
+    }
+
+    .card {
+      background: #1a1a1a;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 0 25px #000;
+      width: 320px;
+    }
+
+    input {
+      width: 100%;
+      margin-bottom: 15px;
+      padding: 10px;
+      border: none;
+      border-radius: 6px;
+      background: #222;
+      color: white;
+    }
+
+    button {
+      width: 100%;
+      padding: 10px;
+      background: #9b59ff;
+      border: none;
+      border-radius: 6px;
+      color: white;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    button:hover {
+      background: #b97aff;
+    }
+
+    #msg {
+      margin-top: 10px;
+      text-align: center;
+    }
+  </style>
 </head>
 <body>
 
-<h1>Fsociety Board</h1>
+<header>Fsocies</header>
 
-<div class="container" id="auth-container">
-  <h2>Регистрация</h2>
-  <input type="text" id="reg-username" placeholder="Никнейм">
-  <input type="password" id="reg-password" placeholder="Пароль">
-  <button id="register-btn">Зарегистрироваться</button>
-
-  <h2>Логин</h2>
-  <input type="text" id="login-username" placeholder="Никнейм">
-  <input type="password" id="login-password" placeholder="Пароль">
-  <button id="login-btn">Войти</button>
-
-  <div id="auth-msg"></div>
-</div>
-
-<div class="container hidden" id="board-container">
-  <div>
-    <span>Привет, <span id="user-name"></span>!</span>
-    <button id="logout-btn">Выйти</button>
+<div class="container">
+  <div class="card">
+    <h2>Регистрация</h2>
+    <input type="text" id="nickname" placeholder="Ник">
+    <input type="password" id="password" placeholder="Пароль">
+    <button onclick="register()">Создать аккаунт</button>
+    <div id="msg"></div>
   </div>
-
-  <h2>Создать тред</h2>
-  <textarea id="thread-content" placeholder="Что хочешь написать?"></textarea>
-  <button id="create-thread-btn">Создать тред</button>
-
-  <h2>Треды</h2>
-  <div id="threads"></div>
 </div>
 
 <script>
-async function api(path, data, method="POST") {
-  const res = await fetch(path, {
-    method,
+async function register() {
+  const nickname = document.getElementById("nickname").value;
+  const password = document.getElementById("password").value;
+
+  const res = await fetch("/register", {
+    method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: data ? JSON.stringify(data) : null
+    body: JSON.stringify({ nickname, password })
   });
-  return res.json();
+
+  const data = await res.json();
+  document.getElementById("msg").innerText =
+    data.success ? "Добро пожаловать в Fsocies!" : data.error;
 }
 
-const authContainer = document.getElementById("auth-container");
-const boardContainer = document.getElementById("board-container");
-const authMsg = document.getElementById("auth-msg");
-const userNameSpan = document.getElementById("user-name");
-const threadsDiv = document.getElementById("threads");
-
-// Регистрация
-document.getElementById("register-btn").onclick = async () => {
-  const username = document.getElementById("reg-username").value;
-  const password = document.getElementById("reg-password").value;
-  const res = await api("/register", { username, password });
-  authMsg.textContent = res.success ? "Регистрация успешна!" : res.msg;
-};
-
-// Логин
-document.getElementById("login-btn").onclick = async () => {
-  const username = document.getElementById("login-username").value;
-  const password = document.getElementById("login-password").value;
-  const res = await api("/login", { username, password });
-  if (res.success) {
-    showBoard(res.username);
-  } else authMsg.textContent = res.msg;
-};
-
-// Выход
-document.getElementById("logout-btn").onclick = async () => {
-  await api("/logout", null);
-  boardContainer.classList.add("hidden");
-  authContainer.classList.remove("hidden");
-};
-
-// Создать тред
-document.getElementById("create-thread-btn").onclick = async () => {
-  const content = document.getElementById("thread-content").value;
-  const res = await api("/thread", { content });
-  if (res.success) {
-    document.getElementById("thread-content").value = "";
-    loadThreads();
-  } else alert(res.msg);
-};
-
-// Показать доску
-function showBoard(username) {
-  userNameSpan.textContent = username;
-  authContainer.classList.add("hidden");
-  boardContainer.classList.remove("hidden");
-  loadThreads();
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js');
 }
-
-// Загрузка тредов
-async function loadThreads() {
-  const threads = await api("/threads", null, "GET");
-  threadsDiv.innerHTML = "";
-  threads.forEach(t => {
-    const div = document.createElement("div");
-    div.className = "thread";
-    div.innerHTML = `<div class="author">${t.author}</div><div class="content">${t.content}</div>`;
-    threadsDiv.appendChild(div);
-  });
-}
-
-// Проверка сессии
-(async () => {
-  const me = await api("/me", null, "GET");
-  if (me.loggedIn) showBoard(me.username);
-})();
 </script>
+
 </body>
 </html>
