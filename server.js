@@ -6,7 +6,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static(__dirname));
 
-// датабвзф
+// дтабазы
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: {
@@ -14,25 +14,7 @@ const pool = new Pool({
   },
 });
 
-// таблички
-async function initDB() {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        nickname VARCHAR(50) UNIQUE NOT NULL,
-        password_hash TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    console.log("✅ Таблица users готова");
-  } catch (err) {
-    console.error("❌ Ошибка БД:", err);
-  }
-}
-
-// Регистр
+// Регинунунуп
 app.post("/register", async (req, res) => {
   const { nickname, password } = req.body;
 
@@ -59,10 +41,9 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// портик
+// Render порт
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, async () => {
-  console.log(`🔥 Fsocies запущен на порту ${PORT}`);
-  await initDB();
+app.listen(PORT, () => {
+  console.log(`чупапи муняню ${PORT}`);
 });
