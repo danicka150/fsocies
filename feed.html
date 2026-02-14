@@ -1,0 +1,35 @@
+<h2>Лента тредов</h2>
+<form id="newThread">
+  <textarea name="content" placeholder="Создай новый тред"></textarea>
+  <button type="submit">Отправить</button>
+</form>
+
+<div id="threads"></div>
+
+<script>
+const threadsDiv = document.getElementById("threads");
+
+// Загрузка ленты
+async function loadThreads() {
+  const res = await fetch("/threads");
+  const data = await res.json();
+  threadsDiv.innerHTML = data.map(t => `<p><b>${t.nickname}</b>: ${t.content}</p>`).join("");
+}
+loadThreads();
+
+// Создание нового треда
+document.getElementById("newThread").addEventListener("submit", async e => {
+  e.preventDefault();
+  const form = e.target;
+  const res = await fetch("/threads", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content: form.content.value })
+  });
+  const data = await res.json();
+  if(data.success) {
+    form.reset();
+    loadThreads();
+  } else alert(data.error);
+});
+</script>
