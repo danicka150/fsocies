@@ -1,9 +1,8 @@
 {
-  "name": "FSociety Board",
-  "short_name": "Board",
+  "name": "Fsocies",
+  "short_name": "Fsocies",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f0f0f",
-  "theme_color": "#00ff88",
-  "icons": []
+  "theme_color": "#9b59ff"
 }
