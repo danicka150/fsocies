@@ -1,108 +1,49 @@
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-  <meta charset="UTF-8">
-  <title>Fsocies</title>
-  <link rel="manifest" href="manifest.json">
+<h2>Регистрация</h2>
+<form id="registerForm">
+  <input type="text" name="nickname" placeholder="Ник" required>
+  <input type="password" name="password" placeholder="Пароль" required>
+  <button type="submit">Регистрация</button>
+</form>
 
-  <style>
-    body {
-      margin: 0;
-      background: #0f0f0f;
-      color: #eaeaea;
-      font-family: Arial, sans-serif;
-    }
+<h2>Вход</h2>
+<form id="loginForm">
+  <input type="text" name="nickname" placeholder="Ник" required>
+  <input type="password" name="password" placeholder="Пароль" required>
+  <button type="submit">Войти</button>
+</form>
 
-    header {
-      background: #111;
-      padding: 15px;
-      text-align: center;
-      font-size: 24px;
-      font-weight: bold;
-      color: #9b59ff;
-      border-bottom: 1px solid #222;
-    }
-
-    .container {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 80vh;
-    }
-
-    .card {
-      background: #1a1a1a;
-      padding: 40px;
-      border-radius: 12px;
-      box-shadow: 0 0 25px #000;
-      width: 320px;
-    }
-
-    input {
-      width: 100%;
-      margin-bottom: 15px;
-      padding: 10px;
-      border: none;
-      border-radius: 6px;
-      background: #222;
-      color: white;
-    }
-
-    button {
-      width: 100%;
-      padding: 10px;
-      background: #9b59ff;
-      border: none;
-      border-radius: 6px;
-      color: white;
-      cursor: pointer;
-      font-weight: bold;
-    }
-
-    button:hover {
-      background: #b97aff;
-    }
-
-    #msg {
-      margin-top: 10px;
-      text-align: center;
-    }
-  </style>
-</head>
-<body>
-
-<header>Fsocies</header>
-
-<div class="container">
-  <div class="card">
-    <h2>Регистрация</h2>
-    <input type="text" id="nickname" placeholder="Ник">
-    <input type="password" id="password" placeholder="Пароль">
-    <button onclick="register()">Создать аккаунт</button>
-    <div id="msg"></div>
-  </div>
-</div>
+<div id="message"></div>
 
 <script>
-async function register() {
-  const nickname = document.getElementById("nickname").value;
-  const password = document.getElementById("password").value;
+const message = document.getElementById("message");
 
+// Регистрация
+document.getElementById("registerForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const form = e.target;
   const res = await fetch("/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ nickname, password })
+    body: JSON.stringify({ nickname: form.nickname.value, password: form.password.value })
   });
-
   const data = await res.json();
-  document.getElementById("msg").innerText =
-    data.success ? "Добро пожаловать в Fsocies!" : data.error;
-}
+  if(data.success) {
+    window.location.href = "/feed.html";
+  } else message.innerText = data.error;
+});
 
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js');
-}
+// Логин
+document.getElementById("loginForm").addEventListener("submit", async e => {
+  e.preventDefault();
+  const form = e.target;
+  const res = await fetch("/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ nickname: form.nickname.value, password: form.password.value })
+  });
+  const data = await res.json();
+  if(data.success) window.location.href = "/feed.html";
+  else message.innerText = data.error;
+});
 </script>
 
-</body>
-</html>
