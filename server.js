@@ -1,21 +1,20 @@
 const express = require("express");
 const { Pool } = require("pg");
 const bcrypt = require("bcrypt");
-const path = require("path");
 
 const app = express();
 app.use(express.json());
 app.use(express.static(__dirname));
 
+// датабвзф
 const pool = new Pool({
-  user: "postgres",
-  host: "localhost",
-  database: "forchan",
-  password: "yourpassword",
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false,
+  },
 });
 
-// 🔥 Функция инициализации БД
+// таблички
 async function initDB() {
   try {
     await pool.query(`
@@ -27,13 +26,13 @@ async function initDB() {
       );
     `);
 
-    console.log("Таблица users проверена / создана");
+    console.log("✅ Таблица users готова");
   } catch (err) {
-    console.error("Ошибка создания таблицы:", err);
+    console.error("❌ Ошибка БД:", err);
   }
 }
 
-// Регистрация
+// Регистр
 app.post("/register", async (req, res) => {
   const { nickname, password } = req.body;
 
@@ -60,9 +59,10 @@ app.post("/register", async (req, res) => {
   }
 });
 
-// Запуск сервера
-app.listen(3000, async () => {
-  console.log("Server running on http://localhost:3000");
-  await initDB(); // 💥 таблицы создаются при запуске
-});
+// портик
+const PORT = process.env.PORT || 3000;
 
+app.listen(PORT, async () => {
+  console.log(`🔥 Fsocies запущен на порту ${PORT}`);
+  await initDB();
+});
